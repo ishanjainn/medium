@@ -1,0 +1,23 @@
+groups:
+  - name: ArgoCDLogLevel
+    rules:
+      - alert: ArgoCDWarns
+        expr: count_over_time({container="argocd"}[1m]|="WARN") > 5
+        labels:
+          severity: warning
+          category: logs
+        annotations:
+          title: "High Number of WARN logs"
+          description: "ArgoCD has too many WARN logs"
+          impact: "impact"
+          action: "action"
+      - alert: ArgoCDErrors
+        expr: count_over_time({container="argocd"}[1m]|="ERROR") > 3
+        labels:
+          severity: critical
+          category: logs
+        annotations:
+          title: "High Number of ERROR logs"
+          description: "ArgoCD has too many ERROR logs"
+          impact: "impact"
+          action: "action"

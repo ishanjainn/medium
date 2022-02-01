@@ -1,0 +1,5 @@
+groups:
+  - name: log-based-records
+    rules:
+      - record: sum_rate_tempo_logs
+        expr: sum(rate({app="tempo-distributed"}[1m]))

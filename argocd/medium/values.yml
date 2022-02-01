@@ -1,0 +1,22 @@
+repoServer:
+  extraArgs:
+   - --revision-cache-expiration=0h5m0s
+server:
+  additionalApplications:
+  - name: root-application
+    namespace: argocd
+    project: default
+    source:
+      repoURL: https://github.com/ishanjainn/loki-rules-using-gitops-medium.git
+      targetRevision: HEAD
+      path: releases/medium/
+      directory:
+        recurse: true
+        exclude: '*kustomization.y*ml'
+    destination:
+      server: https://kubernetes.default.svc
+      namespace: argocd
+    syncPolicy:
+      automated:
+        prune: true
+        selfHeal: true

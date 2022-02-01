@@ -1,0 +1,155 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  destination:
+    namespace: monitoring
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    chart: loki-distributed
+    repoURL: https://grafana.github.io/helm-charts
+    targetRevision: 0.39.3
+    helm:
+      values: |
+        fullnameOverride: loki
+        loki:
+          config: |
+            auth_enabled: false
+            server:
+              http_listen_port: 3100
+            distributor:
+              ring:
+                kvstore:
+                  store: memberlist
+            memberlist:
+              join_members:
+                - {{ include "loki.fullname" . }}-memberlist
+            ingester:
+              lifecycler:
+                ring:
+                  kvstore:
+                    store: memberlist
+                  replication_factor: 1
+              chunk_idle_period: 30m
+              chunk_block_size: 262144
+              chunk_encoding: snappy
+              chunk_retain_period: 1m
+              max_transfer_retries: 0
+              wal:
+                dir: /var/loki/wal
+            limits_config:
+              enforce_metric_name: false
+              reject_old_samples: true
+              reject_old_samples_max_age: 168h
+              max_cache_freshness_per_query: 10m
+            schema_config:
+              configs:
+                - from: 2020-09-07
+                  store: boltdb-shipper
+                  object_store: azure
+                  schema: v11
+                  index:
+                    prefix: loki_index_
+                    period: 24h
+            storage_config:
+              boltdb_shipper:
+                shared_store: azure
+                active_index_directory: /var/loki/index
+                cache_location: /var/loki/cache
+                cache_ttl: 168h
+                {{- if .Values.indexGateway.enabled }}
+                index_gateway_client:
+                  server_address: dns:///{{ include "loki.indexGatewayFullname" . }}:9095
+                {{- end }}
+              azure:
+                container_name: loki
+                account_name: medium-demo
+                account_key: ${STORAGE_ACCOUNT_KEY}
+                request_timeout: 0
+            chunk_store_config:
+              max_look_back_period: 0s
+            table_manager:
+              retention_deletes_enabled: false
+              retention_period: 0s
+            query_range:
+              align_queries_with_step: true
+              max_retries: 5
+              split_queries_by_interval: 15m
+              cache_results: true
+              results_cache:
+                cache:
+                  enable_fifocache: true
+                  fifocache:
+                    max_size_items: 1024
+                    validity: 24h
+            frontend_worker:
+              frontend_address: {{ include "loki.queryFrontendFullname" . }}:9095
+            frontend:
+              log_queries_longer_than: 5s
+              compress_responses: true
+              tail_proxy_url: http://{{ include "loki.querierFullname" . }}:3100
+            ruler:
+              storage:
+                type: local                                                   
+                local:
+                  directory: /etc/loki/rules
+              rule_path: /tmp/loki
+              alertmanager_url: http://prometheus-alertmanager.monitoring:9093
+              ring:
+                kvstore:
+                  store: inmemory
+              remote_write:                                            
+                enabled: true
+                client:
+                  url: http://prometheus-kube-prometheus-prometheus.monitoring:9090/api/v1/write   
+              wal:
+                dir: /var/loki/wal                      
+        ingester:
+          persistence:
+            enabled: true
+            size: 5Gi
+          extraArgs:
+            - -config.expand-env=true
+          extraEnvFrom:
+            - secretRef:
+                name: storage-account-key
+        querier:
+          extraArgs:
+            - -config.expand-env=true
+          extraEnvFrom:
+            - secretRef:
+                name: storage-account-key
+        ruler:
+          enabled: true
+          extraVolumes:                                         
+            - name: loki-ruler-alerting-rules
+              configMap:
+                name: loki-ruler-alerting-rules
+            - name: loki-ruler-recording-rules
+              configMap:
+                name: loki-ruler-recording-rules
+          extraVolumeMounts:                                    
+            - name: loki-ruler-alerting-rules
+              mountPath: "/etc/loki/rules/alerts"               
+            - name: loki-ruler-recording-rules
+              mountPath: "/etc/loki/rules/records"              
+          extraArgs:
+            - -config.expand-env=true
+          extraEnvFrom:
+            - secretRef:
+                name: storage-account-key
+        serviceMonitor:
+          enabled: true
+          labels:
+            release: prometheus
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
