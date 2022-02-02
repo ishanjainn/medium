@@ -7,7 +7,7 @@ server:
     namespace: argocd
     project: default
     source:
-      repoURL: https://github.com/ishanjainn/loki-rules-using-gitops-medium.git
+      repoURL: https://github.com/ishanjainn/medium.git
       targetRevision: HEAD
       path: releases/medium/
       directory:
