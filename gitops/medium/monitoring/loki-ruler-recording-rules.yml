@@ -9,7 +9,7 @@ spec:
     namespace: monitoring
   project: default
   source:
-    path: releases/medium/monitoring/recording-rules/loki
+    path: gitops/medium/monitoring/recording-rules/loki
     repoURL: https://github.com/ishanjainn/medium.git
     targetRevision: HEAD
   syncPolicy:

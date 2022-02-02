@@ -9,7 +9,7 @@ server:
     source:
       repoURL: https://github.com/ishanjainn/medium.git
       targetRevision: HEAD
-      path: releases/medium/
+      path: gitops/medium/
       directory:
         recurse: true
         exclude: '*kustomization.y*ml'

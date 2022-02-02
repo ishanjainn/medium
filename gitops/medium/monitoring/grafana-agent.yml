@@ -1,0 +1,232 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: grafana-agent-service-monitor
+  namespace: monitoring
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      name: grafana-agent-traces
+  namespaceSelector:
+    any: true
+  endpoints:
+    - port: agent-http-metrics
+      path: /metrics
+    - port: span-metrics
+      path: /metrics
+---
+apiVersion: v1
+data:
+  agent.yaml: |
+    server:
+      http_listen_port: 8080
+      log_level: debug
+    tempo:
+      configs:
+        - name: default
+          batch:
+            send_batch_size: 1000
+            timeout: 5s
+          receivers:
+            jaeger:
+              protocols:
+                grpc:
+                thrift_http:
+            otlp:
+              protocols:
+                grpc:
+                http:
+          remote_write:
+            - endpoint: tempo-distributor.monitoring:4317     
+              insecure: true
+          scrape_configs:
+            - bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+              job_name: kubernetes-pods
+              kubernetes_sd_configs:
+                - role: pod
+              relabel_configs:
+                - action: replace
+                  source_labels:
+                    - __meta_kubernetes_namespace
+                  target_label: namespace
+                - action: replace
+                  source_labels:
+                    - __meta_kubernetes_pod_name
+                  target_label: pod
+                - action: replace
+                  source_labels:
+                    - __meta_kubernetes_pod_container_name
+                  target_label: container
+          attributes:
+            actions:
+            - action: upsert
+              key: env
+              value: blueprint-staging
+          spanmetrics:
+            handler_endpoint: 0.0.0.0:8889
+kind: ConfigMap
+metadata:
+  name: grafana-agent-traces
+  namespace: monitoring
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: grafana-agent-traces
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: grafana-agent-traces
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+      - nodes/proxy
+      - services
+      - endpoints
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+  - nonResourceURLs:
+      - /metrics
+    verbs:
+      - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: grafana-agent-traces
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: grafana-agent-traces
+subjects:
+  - kind: ServiceAccount
+    name: grafana-agent-traces
+    namespace: monitoring
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    name: grafana-agent-traces
+  name: grafana-agent-traces
+  namespace: monitoring
+spec:
+  ports:
+    - name: agent-http-metrics
+      port: 8080
+      targetPort: 8080
+    - name: agent-thrift-compact
+      port: 6831
+      protocol: UDP
+      targetPort: 6831
+    - name: agent-thrift-binary
+      port: 6832
+      protocol: UDP
+      targetPort: 6832
+    - name: agent-thrift-http
+      port: 14268
+      protocol: TCP
+      targetPort: 14268
+    - name: agent-thrift-grpc
+      port: 14250
+      protocol: TCP
+      targetPort: 14250
+    - name: agent-zipkin
+      port: 9411
+      protocol: TCP
+      targetPort: 9411
+    - name: agent-otlp
+      port: 55680
+      protocol: TCP
+      targetPort: 55680
+    - name: agent-otlp-http
+      port: 4318
+      protocol: TCP
+      targetPort: 4318
+    - name: agent-opencensus
+      port: 55678
+      protocol: TCP
+      targetPort: 55678
+    - name: span-metrics
+      port: 8889
+      targetPort: 8889
+  selector:
+    name: grafana-agent-traces
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana-agent-traces
+  namespace: monitoring
+spec:
+  minReadySeconds: 10
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      name: grafana-agent-traces
+  template:
+    metadata:
+      labels:
+        name: grafana-agent-traces
+    spec:
+      containers:
+        - args:
+            - -config.file=/etc/agent/agent.yaml
+          command:
+            - /bin/agent
+          env:
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          image: grafana/agent:v0.21.1
+          imagePullPolicy: IfNotPresent
+          name: agent
+          ports:
+            - containerPort: 8080
+              name: http-metrics
+            - containerPort: 6831
+              name: thrift-compact
+              protocol: UDP
+            - containerPort: 6832
+              name: thrift-binary
+              protocol: UDP
+            - containerPort: 14268
+              name: thrift-http
+              protocol: TCP
+            - containerPort: 14250
+              name: thrift-grpc
+              protocol: TCP
+            - containerPort: 9411
+              name: zipkin
+              protocol: TCP
+            - containerPort: 55680
+              name: otlp
+              protocol: TCP
+            - containerPort: 4318
+              name: otlp-http
+              protocol: TCP
+            - containerPort: 55678
+              name: opencensus
+              protocol: TCP
+            - containerPort: 8889
+              name: span-metrics
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /etc/agent
+              name: grafana-agent-traces
+      serviceAccount: grafana-agent-traces
+      volumes:
+        - configMap:
+            name: grafana-agent-traces
+          name: grafana-agent-traces

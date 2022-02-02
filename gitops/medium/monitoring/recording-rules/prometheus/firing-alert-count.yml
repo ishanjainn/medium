@@ -1,0 +1,13 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: firing-alerts-count
+  namespace: monitoring
+  labels:
+    release: prometheus
+spec:
+  groups:
+    - name: AlertManager
+      rules:
+        - record: firing_alerts_count
+          expr: count(ALERTS{alertstate="firing"})

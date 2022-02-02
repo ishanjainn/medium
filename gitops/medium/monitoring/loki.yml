@@ -68,7 +68,7 @@ spec:
                 {{- end }}
               azure:
                 container_name: loki
-                account_name: medium-demo
+                account_name: medium
                 account_key: ${STORAGE_ACCOUNT_KEY}
                 request_timeout: 0
             chunk_store_config:

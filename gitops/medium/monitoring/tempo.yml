@@ -1,0 +1,74 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tempo
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  destination:
+    namespace: monitoring
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    chart: tempo-distributed
+    repoURL: https://grafana.github.io/helm-charts
+    targetRevision: 0.12.2
+    helm:
+      values: |
+        fullnameOverride: tempo
+        gateway:
+          enabled: true
+        ingester:
+          persistence:
+            enabled: true
+            size: 5Gi
+          extraArgs:
+            - -config.expand-env=true
+          extraEnvFrom:
+            - secretRef:
+               name: storage-account-key
+        querier:
+          extraArgs:
+            - -config.expand-env=true
+          extraEnvFrom:
+            - secretRef:
+                name: storage-account-key
+        queryFrontend:
+          extraArgs:
+            - -config.expand-env=true
+          extraEnvFrom:
+            - secretRef:
+                name: storage-account-key
+        compactor:
+          extraArgs:
+            - -config.expand-env=true
+          extraEnvFrom:
+            - secretRef:
+                name: storage-account-key
+        traces:
+          jaeger:
+            thriftHttp: true
+          otlp:
+            http: true
+            grpc: true
+        search:
+          enabled: true
+        storage:
+          trace:
+            backend: azure
+            azure:
+              container-name: tempo
+              storage-account-name: medium
+              storage-account-key: ${STORAGE_ACCOUNT_KEY}
+        serviceMonitor:
+          enabled: true
+          namespace: monitoring
+          labels:
+            release: prometheus
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
