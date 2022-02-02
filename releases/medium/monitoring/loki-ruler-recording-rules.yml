@@ -10,7 +10,7 @@ spec:
   project: default
   source:
     path: releases/medium/monitoring/recording-rules/loki
-    repoURL: https://github.com/ishanjainn/loki-rules-using-gitops-medium.git
+    repoURL: https://github.com/ishanjainn/medium.git
     targetRevision: HEAD
   syncPolicy:
     automated:
